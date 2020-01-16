@@ -2,8 +2,12 @@ package com.payroll;
 
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.EntityModel;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -15,26 +19,27 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 public class EmployeeController {
 
     private final EmployeeRepository repository;
+    private final EmployeeResourceAssembler assembler;
 
-    EmployeeController(EmployeeRepository repository){
+    EmployeeController(EmployeeRepository repository, EmployeeResourceAssembler assembler){
         this.repository = repository;
+        this.assembler = assembler;
     }
 
     @GetMapping("/employees")
     CollectionModel<EntityModel<Employee>> all(){
 
         List<EntityModel<Employee>> employees = repository.findAll().stream()
-                .map(employee -> new EntityModel<Employee>(employee,
-                        linkTo(methodOn(EmployeeController.class).one(employee.getId())).withSelfRel(),
-                        linkTo(methodOn(EmployeeController.class).all()).withRel("employees")))
+                .map(assembler :: toModel)
                 .collect(Collectors.toList());
 
         return new CollectionModel<>(employees, linkTo(methodOn(EmployeeController.class).all()).withSelfRel());
     }
 
     @PostMapping("/employees")
-    Employee newEmployee(@RequestBody Employee newEmployee) {
-        return repository.save(newEmployee);
+    ResponseEntity<?> newEmployee(@RequestBody Employee newEmployee) throws URISyntaxException {
+        EntityModel<Employee> model = assembler.toModel(repository.save(newEmployee));
+        return ResponseEntity.ok().body(model);
     }
 
     @GetMapping("/employees/{id}")
@@ -43,9 +48,7 @@ public class EmployeeController {
         Employee employee = repository.findById(id)
                 .orElseThrow(() -> new EmployeeNotFoundException(id));
 
-        return new EntityModel<Employee>(employee,
-                linkTo(methodOn(EmployeeController.class).one(id)).withSelfRel(),
-                linkTo(methodOn(EmployeeController.class).all()).withRel("employees"));
+        return assembler.toModel(employee);
     }
 
     @PutMapping("/employees/{id}")
